@@ -74,6 +74,22 @@ export function isUnlocked(progress, skill, level, teacher = false) {
   return (progress?.[skill]?.[level - 1]?.stars || 0) >= 1;
 }
 
+export function suggestNext(progress, { teacher = false, touch = false, skills = SKILL_IDS, mouseOnly = {} } = {}) {
+  const usable = skills.filter((id) => !(touch && mouseOnly[id]));
+  for (const level of [0, 1, 2]) {
+    for (const skill of usable) {
+      if (isUnlocked(progress, skill, level, teacher) && !(progress?.[skill]?.[level]?.stars >= 1)) return { skill, level, stars: 0 };
+    }
+  }
+  for (const level of [0, 1, 2]) {
+    for (const skill of usable) {
+      const stars = progress?.[skill]?.[level]?.stars || 0;
+      if (stars < 3) return { skill, level, stars };
+    }
+  }
+  return null;
+}
+
 export function examUnlocked(progress, teacher = false) {
   return teacher || SKILL_IDS.every((id) => (progress?.[id]?.[1]?.stars || 0) >= 1);
 }

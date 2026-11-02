@@ -6,7 +6,7 @@ import { playDemo } from './demo.js';
 import { load, save, defaults } from './storage.js';
 import {
   adviceFor, buildExamPlan, compareBest, examPassed, examUnlocked, isUnlocked, mergeRecord,
-  starsFor, totalStars, weakestSkills, emptyProgress,
+  starsFor, suggestNext, totalStars, weakestSkills, emptyProgress,
 } from './scoring.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -108,8 +108,10 @@ function renderMap() {
       <div class="lv-row">${levels}</div></article>`;
   }).join('');
   const examOpen = examUnlocked(data.progress, teacher) && !state.touch;
+  const tip = suggestNext(data.progress, { teacher, touch: state.touch, mouseOnly: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].mouseOnly])) });
   app.innerHTML = `
-    <div class="map-head"><h1>技能地圖</h1><p>七項技能的「入門」已全部開放。拿到 1 粒星便解鎖下一級。</p></div>
+    <div class="map-head"><div><h1>技能地圖</h1><p>七項技能的「入門」已全部開放。拿到 1 粒星便解鎖下一級。</p></div>
+      ${tip ? `<button class="btn primary next-tip" id="next-tip" data-skill="${tip.skill}" data-level="${tip.level}"><span aria-hidden="true">👉</span> 建議下一步：${SKILLS[tip.skill].icon} ${SKILLS[tip.skill].name} · ${LEVEL_NAMES[tip.level]}${tip.stars ? `（${starStr(tip.stars)}）` : ''}</button>` : ''}</div>
     <div class="map-grid">${cards}
       <article class="card skill-card exam-card${examOpen ? '' : ' locked'}">
         <div class="skill-head"><span class="skill-icon" aria-hidden="true">🏆</span><div><h2>專家測驗</h2><p>${examOpen ? '20 題混合挑戰，準確度 85% 或以上即合格，可獲證書。' : state.touch ? '專家測驗需要滑鼠。' : '七項技能的「熟練」級都拿到 1 粒星便解鎖。'}</p></div></div>
@@ -119,6 +121,7 @@ function renderMap() {
     </div>`;
   app.querySelectorAll('.lv').forEach((b) => { b.onclick = () => renderDemo(b.dataset.skill, Number(b.dataset.level)); });
   $('#exam')?.addEventListener('click', renderExamIntro);
+  $('#next-tip')?.addEventListener('click', (e) => renderDemo(e.currentTarget.dataset.skill, Number(e.currentTarget.dataset.level)));
   $('#cert')?.addEventListener('click', () => renderCertificate(data.certificate, false));
 }
 
@@ -169,6 +172,8 @@ function startPlay(meta) {
   stopSession();
   setView('play');
   state.lastMeta = meta;
+  state.needRelayout = false;
+  const big = data.settings.big;
   const plan = meta.kind === 'exam'
     ? buildExamPlan()
     : Array.from({ length: questionCount(meta.skill) }, () => ({ skill: meta.skill, level: meta.level }));
@@ -179,8 +184,8 @@ function startPlay(meta) {
         <span class="st-title">${title}</span>
         <span class="st-item">題目 <b id="st-q">1 / ${plan.length}</b></span>
         <span class="st-item">準確度 <b id="st-acc">—</b></span>
-        ${data.settings.big ? '<span class="tag">大目標</span>' : ''}
-        <button class="btn" id="pause">⏸ 暫停</button>
+        ${big ? '<span class="tag">大目標</span>' : ''}
+        <button class="btn" id="pause" title="快捷鍵：P">⏸ 暫停</button>
       </div>
       <div class="instr-bar card"><span id="st-skill" class="st-skill"></span><span id="instruction" aria-live="polite"></span><span id="feedback" class="feedback" aria-live="assertive"></span></div>
       <div class="stage-wrap">
@@ -194,7 +199,7 @@ function startPlay(meta) {
   const session = createSession({
     plan,
     stage,
-    settings: data.settings,
+    settings: { ...data.settings },
     isTouch: () => state.touch,
     hooks: {
       instruct: (t) => { $('#instruction').textContent = t; },
@@ -216,7 +221,7 @@ function startPlay(meta) {
       finish: (result) => {
         state.session = null;
         if (meta.kind === 'exam') renderExamResult(result);
-        else renderResult(meta, result);
+        else renderResult(meta, result, big);
       },
     },
   });
@@ -237,8 +242,9 @@ function sizeStage() {
 function pauseGame(reason) {
   const s = state.session;
   if (!s) return;
-  if (s.paused && state.pauseReason === 'small' && reason !== 'small') state.pauseReason = reason;
-  if (!s.paused) { s.pause(); state.pauseReason = reason; }
+  if (!s.paused) { s.pause(); state.prevPause = null; }
+  else if (reason === 'small' && state.pauseReason !== 'small') state.prevPause = state.pauseReason;
+  state.pauseReason = reason;
   const ov = $('#overlay');
   ov.hidden = false;
   if (reason === 'small') {
@@ -259,7 +265,9 @@ function resumeGame() {
   if (!s) return;
   $('#overlay').hidden = true;
   state.pauseReason = null;
+  state.prevPause = null;
   s.resume();
+  if (state.needRelayout) { state.needRelayout = false; s.relayout(); }
 }
 
 function tooSmall() {
@@ -268,12 +276,18 @@ function tooSmall() {
 
 function checkSize() {
   if (!state.session) return;
-  if (tooSmall()) pauseGame('small');
-  else if (state.pauseReason === 'small') resumeGame();
+  if (tooSmall()) {
+    if (state.pauseReason !== 'small') pauseGame('small');
+  } else if (state.pauseReason === 'small') {
+    const prev = state.prevPause;
+    state.prevPause = null;
+    if (prev) pauseGame(prev);
+    else resumeGame();
+  }
 }
 
 // ---------- Results ----------
-function renderResult(meta, r) {
+function renderResult(meta, r, big) {
   setView('result');
   const { skill, level } = meta;
   const std = CONFIG.skills[skill].levels[level].std;
@@ -282,7 +296,7 @@ function renderResult(meta, r) {
   const prev = data.progress[skill][level];
   const compare = compareBest(prev.avg, r.avg);
   if (!teacher) {
-    data.progress[skill][level] = mergeRecord(prev, { stars, acc: r.acc, avg: r.avg, big: data.settings.big });
+    data.progress[skill][level] = mergeRecord(prev, { stars, acc: r.acc, avg: r.avg, big });
     persist();
     applySettings();
   }
@@ -291,7 +305,7 @@ function renderResult(meta, r) {
   const errs = Object.entries(r.errors).sort((a, b) => b[1] - a[1]);
   app.innerHTML = `
     <section class="card result">
-      <p class="crumb">${SKILLS[skill].icon} ${SKILLS[skill].name} · ${LEVEL_NAMES[level]}${data.settings.big ? ' · <span class="tag">大目標</span>' : ''}${teacher ? ' · <span class="tag">老師模式（不記錄）</span>' : ''}</p>
+      <p class="crumb">${SKILLS[skill].icon} ${SKILLS[skill].name} · ${LEVEL_NAMES[level]}${big ? ' · <span class="tag">大目標</span>' : ''}${teacher ? ' · <span class="tag">老師模式（不記錄）</span>' : ''}</p>
       <h1>完成！</h1>
       <div class="big-stars" aria-label="${stars} 粒星">${[1, 2, 3].map((i) => `<span class="${i <= stars ? 'on' : ''}" style="--i:${i}">★</span>`).join('')}</div>
       <div class="stats">
@@ -439,6 +453,15 @@ document.addEventListener('pointerdown', (e) => {
   }
 }, true);
 
+document.addEventListener('keydown', (e) => {
+  if (state.view !== 'play' || !state.session || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.querySelector('dialog[open]') || e.target.closest?.('input, textarea')) return;
+  if (e.key !== 'p' && e.key !== 'P') return;
+  e.preventDefault();
+  if (!state.session.paused) pauseGame('user');
+  else if (state.pauseReason !== 'small') resumeGame();
+});
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state.session && !state.session.paused) pauseGame('hidden');
 });
@@ -450,7 +473,9 @@ window.addEventListener('resize', () => {
     if (state.view !== 'play') return;
     sizeStage();
     checkSize();
-    if (state.session && !state.session.paused) state.session.relayout();
+    if (!state.session) return;
+    if (state.session.paused) state.needRelayout = true;
+    else state.session.relayout();
   }, 150);
 });
 

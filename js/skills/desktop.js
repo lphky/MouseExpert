@@ -337,7 +337,11 @@ export default function desktop(ctx) {
 
   function openMenuAt(e, id) {
     const p = ctx.local(e);
-    menu.open(p.x + 2, p.y + 2, MENU_POOL, (opt) => event({ k: 'choose', id, opt }, root.querySelector(`[data-id="${id}"]`)));
+    menu.open(p.x + 2, p.y + 2, MENU_POOL, (opt) => {
+      if (event({ k: 'choose', id, opt }, root.querySelector(`[data-id="${id}"]`))) return;
+      const s = current();
+      if (s && s.k === 'choose') { at -= 1; instruct(); }
+    });
   }
 
   render();

@@ -92,6 +92,7 @@ function path(ctx) {
   };
   wait();
   ctx.on(ctx.stage, 'pointermove', (e) => {
+    if (ctx.locked()) return;
     const p = ctx.local(e);
     if (!tracing) {
       if (Math.hypot(p.x - p0.x, p.y - p0.y) <= R) {
@@ -115,7 +116,7 @@ function path(ctx) {
     if (Math.hypot(p.x - p6.x, p.y - p6.y) <= R) ctx.ok(svg);
   });
   ctx.on(ctx.stage, 'pointerleave', () => {
-    if (tracing) {
+    if (tracing && !ctx.locked()) {
       ctx.fail('離開路線', '箭頭走出了練習區，回到起點再試');
       wait();
     }

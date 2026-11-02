@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { starsFor, accuracy, average, adviceFor, mergeRecord, isUnlocked, examUnlocked, emptyProgress, buildExamPlan, examPassed, weakestSkills, compareBest, totalStars } from '../js/scoring.js';
+import { starsFor, accuracy, average, adviceFor, mergeRecord, isUnlocked, examUnlocked, emptyProgress, buildExamPlan, examPassed, weakestSkills, compareBest, totalStars, suggestNext } from '../js/scoring.js';
 import { sanitize, load, save, defaults, STORAGE_KEY } from '../js/storage.js';
 import { CONFIG, SKILL_IDS, questionCount } from '../js/config.js';
 
@@ -77,4 +77,17 @@ test('儲存：讀回、壞資料回復預設、不可用時不崩潰', () => {
   const r = load(broken); assert.equal(r.available, false); assert.equal(save(d, broken), false);
   const clean = sanitize({ version: 1, name: 5, progress: { click: [{ stars: 9, acc: 2, avg: 'x' }] } });
   assert.equal(clean.name, ''); assert.equal(clean.progress.click[0].stars, 3); assert.equal(clean.progress.click[0].acc, 1); assert.equal(clean.progress.click[0].avg, null);
+});
+
+test('建議下一步：先補未拿星的已解鎖級別，觸控時略過需要滑鼠的技能，全部三星時為 null', () => {
+  const p = emptyProgress();
+  assert.deepEqual(suggestNext(p), { skill: 'hover', level: 0, stars: 0 });
+  assert.deepEqual(suggestNext(p, { touch: true, mouseOnly: { hover: true } }), { skill: 'click', level: 0, stars: 0 });
+  for (const id of SKILL_IDS) p[id][0].stars = 1;
+  assert.deepEqual(suggestNext(p), { skill: 'hover', level: 1, stars: 0 });
+  for (const id of SKILL_IDS) p[id].forEach((r) => { r.stars = 3; });
+  p.drag[2].stars = 2;
+  assert.deepEqual(suggestNext(p), { skill: 'drag', level: 2, stars: 2 });
+  p.drag[2].stars = 3;
+  assert.equal(suggestNext(p), null);
 });

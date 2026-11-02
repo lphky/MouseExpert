@@ -306,3 +306,64 @@ test('觸控：首次提示一次，需要滑鼠的技能及測驗不能進入�
   expect((await stored(page)).touchNotice).toBe(true);
   await ctx.close();
 });
+
+test('更新：手動暫停後視窗變小再放大，仍可繼續；P 鍵暫停／繼續；大目標中途更改不影響本級', async ({ page }) => {
+  const errors = watchErrors(page);
+  await fresh(page);
+  await toMap(page);
+  await startLevel(page, 'click', 0);
+  await page.click('#pause');
+  await page.setViewportSize({ width: 560, height: 480 });
+  await expect(page.locator('#overlay')).toContainText('請放大視窗或改用電腦');
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await expect(page.locator('#overlay')).toContainText('已暫停');
+  await page.click('#ov-go');
+  await expect(page.locator('#overlay')).toBeHidden();
+  await page.keyboard.press('p');
+  await expect(page.locator('#overlay')).toContainText('已暫停');
+  await page.keyboard.press('P');
+  await expect(page.locator('#overlay')).toBeHidden();
+  await page.click('#btn-settings');
+  await page.check('#set-big');
+  await page.click('#set-close');
+  await page.click('#ov-go');
+  await playLevel(page);
+  await expect(page.locator('.result .crumb')).not.toContainText('大目標');
+  const data = await stored(page);
+  expect(data.progress.click[0].big).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('更新：技能地圖顯示「建議下一步」', async ({ page }) => {
+  await fresh(page);
+  await toMap(page);
+  await expect(page.locator('#next-tip')).toContainText('移動與停留 · 入門');
+  await page.click('#next-tip');
+  await expect(page.locator('.demo .crumb')).toContainText('移動與停留 · 入門');
+});
+
+test('模擬桌面：選錯選項後指示回到「右鍵按…」，再右鍵可重選', async ({ page }) => {
+  const errors = watchErrors(page);
+  await fresh(page);
+  await toMap(page);
+  await startLevel(page, 'desktop', 0);
+  let step = null;
+  for (let i = 0; i < 40; i++) {
+    step = JSON.parse(await page.locator('.desk').getAttribute('data-step'));
+    if (step.k === 'ctx') break;
+    await page.click('#pause');
+    await page.click('#ov-restart');
+  }
+  expect(step.k).toBe('ctx');
+  const icon = page.locator(`#stage [data-id="${step.id}"]`);
+  await icon.click({ button: 'right' });
+  const want = JSON.parse(await page.locator('.desk').getAttribute('data-step')).opt;
+  const wrong = want === '刪除' ? '複製' : '刪除';
+  await page.locator(`.ctx-menu [data-option="${wrong}"]`).click();
+  await expect(page.locator('#feedback')).toContainText(`你選了『${wrong}』`);
+  await expect(page.locator('#instruction')).toContainText('右鍵按');
+  await icon.click({ button: 'right' });
+  await page.locator(`.ctx-menu [data-option="${want}"]`).click();
+  await expect(page.locator('#instruction')).not.toContainText('右鍵按');
+  expect(errors).toEqual([]);
+});
