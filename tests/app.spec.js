@@ -367,3 +367,59 @@ test('模擬桌面：選錯選項後指示回到「右鍵按…」，再右鍵�
   await expect(page.locator('#instruction')).not.toContainText('右鍵按');
   expect(errors).toEqual([]);
 });
+
+test('雙擊：第一下與第二下都有動畫回饋', async ({ page }) => {
+  const errors = watchErrors(page);
+  await fresh(page);
+  await toMap(page);
+  await startLevel(page, 'dblclick', 0);
+  const t = page.locator('#stage .dbl-target');
+  const b = await t.boundingBox();
+  const c = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  await page.mouse.click(c.x, c.y);
+  await expect(page.locator('#stage .ripple.r1')).toHaveCount(1);
+  await expect(t).toContainText('1');
+  await page.mouse.click(c.x, c.y);
+  await expect(page.locator('#stage .ripple.r2')).toHaveCount(1);
+  await expect(t).toHaveClass(/second/);
+  await expect(page.locator('#feedback')).toContainText('做得好');
+  expect(errors).toEqual([]);
+});
+
+test('模擬桌面：圖示文字不超出圖示框', async ({ page }) => {
+  await fresh(page);
+  await toMap(page);
+  await startLevel(page, 'desktop', 0);
+  const bad = await page.evaluate(() => [...document.querySelectorAll('.desk > .icon')].filter((el) => {
+    const b = el.getBoundingClientRect();
+    return [...el.children].some((c) => { const r = c.getBoundingClientRect(); return r.bottom > b.bottom - 2 || r.top < b.top || r.right > b.right || r.left < b.left; });
+  }).map((el) => el.textContent));
+  expect(bad).toEqual([]);
+});
+
+test('移動與停留專家：走出路線後顯示走過的路、最遠位置及鼓勵', async ({ page }) => {
+  const errors = watchErrors(page);
+  await fresh(page);
+  await toMap(page);
+  await page.click('#btn-settings'); await page.check('#set-teacher'); await page.click('#set-close');
+  await startLevel(page, 'hover', 2);
+  const pts = await page.evaluate(() => {
+    const st = document.querySelector('#stage').getBoundingClientRect();
+    const p = document.querySelector('#stage .track');
+    const len = p.getTotalLength();
+    const out = [];
+    for (let i = 0; i <= 50; i++) { const q = p.getPointAtLength((len * i) / 100); out.push({ x: q.x + st.left, y: q.y + st.top }); }
+    return out;
+  });
+  await page.mouse.move(pts[0].x, pts[0].y, { steps: 4 });
+  for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 2 });
+  const last = pts[pts.length - 1];
+  await page.mouse.move(last.x, last.y + 200, { steps: 6 });
+  await expect(page.locator('#stage .trail.failed')).toHaveCount(1);
+  expect((await page.locator('#stage .trail').getAttribute('points')).split(' ').length).toBeGreaterThan(10);
+  await expect(page.locator('#stage .exit-mark')).toHaveAttribute('visibility', 'visible');
+  await expect(page.locator('#stage .best-flag')).toHaveAttribute('visibility', 'visible');
+  await expect(page.locator('#feedback')).toContainText(/一半|%/);
+  await expect(page.locator('#instruction')).toContainText('⭐');
+  expect(errors).toEqual([]);
+});

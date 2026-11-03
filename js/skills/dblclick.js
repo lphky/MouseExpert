@@ -11,19 +11,27 @@ export default function dblclick(ctx) {
   el.dataset.role = 'target';
   ctx.instruct('把箭頭移到圓形上，連續快速按左鍵兩下');
   const tracker = doubleTracker(ctx, gap, maxMove);
+  const label = el.querySelector('span');
+  const ripple = (kind) => {
+    const pad = Math.round(size * 0.35);
+    const rp = ctx.add('div', `ripple ${kind}`, { x: r.x - pad, y: r.y - pad, w: size + pad * 2, h: size + pad * 2 });
+    rp.setAttribute('aria-hidden', 'true');
+    ctx.after(600, () => rp.remove());
+  };
+  const reset = () => { el.classList.remove('half'); label.textContent = '2×'; };
   ctx.on(ctx.stage, 'pointerdown', (e) => {
     if (!isLeft(e) || ctx.locked()) return;
     if (e.target.closest('[data-role="target"]')) {
       const p = ctx.local(e);
       tracker.press(el, p.x, p.y, {
-        first: () => { el.classList.remove('half'); void el.offsetWidth; el.classList.add('half'); },
-        double: () => ctx.ok(el),
-        slow: () => { el.classList.remove('half'); ctx.fail('雙擊太慢', '要快快地連按兩下'); },
-        moved: () => { el.classList.remove('half'); ctx.fail('雙擊時移動', '按的時候手不要移動'); },
+        first: () => { el.classList.remove('half'); void el.offsetWidth; el.classList.add('half'); label.textContent = '1'; ripple('r1'); },
+        double: () => { el.classList.remove('half'); el.classList.add('second'); label.textContent = '2✓'; ripple('r2'); ctx.ok(el); },
+        slow: () => { reset(); ctx.fail('雙擊太慢', '要快快地連按兩下'); },
+        moved: () => { reset(); ctx.fail('雙擊時移動', '按的時候手不要移動'); },
       });
     } else {
       tracker.clear();
-      el.classList.remove('half');
+      reset();
       ctx.fail('未按中', '差一點，再瞄準圓形');
     }
   });

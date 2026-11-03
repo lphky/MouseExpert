@@ -62,6 +62,10 @@ function path(ctx) {
     `<svg width="${w}" height="${h}" aria-hidden="true">
       <path class="track" d="${d}" stroke-width="${width}"/>
       <path class="track-line" d="${d}"/>
+      <path class="best-run" d=""/>
+      <polyline class="trail" points=""/>
+      <g class="best-flag" visibility="hidden"><circle r="13"/><text y="5" text-anchor="middle">⭐</text></g>
+      <g class="exit-mark" visibility="hidden"><circle r="12"/><text y="5" text-anchor="middle">✗</text></g>
       <circle class="path-start" cx="${p0.x}" cy="${p0.y}" r="${R}"/>
       <circle class="path-end" cx="${p6.x}" cy="${p6.y}" r="${R}"/>
       <text x="${p0.x}" y="${p0.y + 6}" text-anchor="middle">起</text>
@@ -75,20 +79,64 @@ function path(ctx) {
     const p = pathEl.getPointAtLength((len * i) / 300);
     pts.push({ x: p.x, y: p.y });
   }
-  const onTrack = (p) => {
+  const N = pts.length - 1;
+  const nearest = (p, from = 0, to = N) => {
     let min = Infinity;
-    for (const q of pts) {
-      const dd = (p.x - q.x) ** 2 + (p.y - q.y) ** 2;
-      if (dd < min) min = dd;
+    let idx = from;
+    for (let i = Math.max(0, from); i <= Math.min(N, to); i++) {
+      const dd = (p.x - pts[i].x) ** 2 + (p.y - pts[i].y) ** 2;
+      if (dd < min) { min = dd; idx = i; }
     }
-    return Math.sqrt(min) <= half + 2 || Math.hypot(p.x - p0.x, p.y - p0.y) <= R || Math.hypot(p.x - p6.x, p.y - p6.y) <= R;
+    return { dist: Math.sqrt(min), idx };
+  };
+  const onTrack = (p) => nearest(p).dist <= half + 2 || Math.hypot(p.x - p0.x, p.y - p0.y) <= R || Math.hypot(p.x - p6.x, p.y - p6.y) <= R;
+  const trail = svg.querySelector('.trail');
+  const bestRun = svg.querySelector('.best-run');
+  const bestFlag = svg.querySelector('.best-flag');
+  const exitMark = svg.querySelector('.exit-mark');
+  const fmt = (p) => `${Math.round(p.x)},${Math.round(p.y)}`;
+  let trailPts = [];
+  let idx = 0;
+  let best = 0;
+  let tries = 0;
+  let milestone = 0;
+  const pct = (i) => Math.round((i / N) * 100);
+  const drawTrail = () => trail.setAttribute('points', trailPts.map(fmt).join(' '));
+  const showBest = () => {
+    if (best <= 0) return;
+    const q = pts[best];
+    bestFlag.setAttribute('transform', `translate(${q.x},${q.y})`);
+    bestFlag.setAttribute('visibility', 'visible');
+    bestRun.setAttribute('d', `M${pts.slice(0, best + 1).map(fmt).join(' L')}`);
+  };
+  const cheer = (reached, prevBest) => {
+    const p = pct(reached);
+    if (tries === 1 && p < 15) return '剛開始很正常！回到起點，慢慢沿着路線走';
+    if (reached > prevBest && prevBest > 0) return `比之前更遠了！你走到 ${p}%，回到起點再試`;
+    if (p >= 75) return `好接近終點了（${p}%）！回到起點再挑戰一次`;
+    if (p >= 50) return `已走了一半以上（${p}%），做得好！回到起點再試`;
+    if (tries >= 4) return `這一關真的很難，慢一點也沒關係。⭐ 是你走得最遠的地方（${pct(best)}%）`;
+    return `你走了 ${p}%，紅色線是剛才走過的路。回到起點再試`;
   };
   let tracing = false;
   let lastP = null;
   const wait = () => {
     tracing = false;
     svg.classList.remove('tracing');
-    ctx.instruct('把箭頭移到綠色「起」點，然後沿着路線移到🏁終點');
+    ctx.instruct(best > 0
+      ? '回到綠色「起」點再試。⭐ 是你最遠到過的地方'
+      : '把箭頭移到綠色「起」點，然後沿着路線移到🏁終點');
+  };
+  const lose = (q, msg) => {
+    tries += 1;
+    const prevBest = best;
+    if (idx > best) best = idx;
+    trail.classList.add('failed');
+    exitMark.setAttribute('transform', `translate(${q.x},${q.y})`);
+    exitMark.setAttribute('visibility', 'visible');
+    showBest();
+    ctx.fail('離開路線', msg || cheer(idx, prevBest));
+    wait();
   };
   wait();
   ctx.on(ctx.stage, 'pointermove', (e) => {
@@ -98,6 +146,12 @@ function path(ctx) {
       if (Math.hypot(p.x - p0.x, p.y - p0.y) <= R) {
         tracing = true;
         lastP = p;
+        idx = 0;
+        milestone = 0;
+        trailPts = [p];
+        trail.classList.remove('failed');
+        exitMark.setAttribute('visibility', 'hidden');
+        drawTrail();
         svg.classList.add('tracing');
         ctx.instruct('沿着路線慢慢移到🏁終點，不要走出路線');
       }
@@ -107,18 +161,25 @@ function path(ctx) {
     for (let i = 1; i <= steps; i++) {
       const q = { x: lastP.x + ((p.x - lastP.x) * i) / steps, y: lastP.y + ((p.y - lastP.y) * i) / steps };
       if (!onTrack(q)) {
-        ctx.fail('離開路線', '沿着路線慢慢走，回到起點再試');
-        wait();
+        trailPts.push(q);
+        drawTrail();
+        lose(q);
         return;
       }
+      const near = nearest(q, idx - 30, idx + 30);
+      if (near.dist <= half + 2 && near.idx > idx) idx = near.idx;
     }
     lastP = p;
+    const tail = trailPts[trailPts.length - 1];
+    if (Math.hypot(p.x - tail.x, p.y - tail.y) >= 3) { trailPts.push(p); drawTrail(); }
+    const m = Math.floor(pct(idx) / 25);
+    if (m > milestone && m < 4) {
+      milestone = m;
+      ctx.note(m === 1 ? '很好，繼續保持！' : m === 2 ? '已經一半了，加油！' : '快到終點了，慢慢來！');
+    }
     if (Math.hypot(p.x - p6.x, p.y - p6.y) <= R) ctx.ok(svg);
   });
   ctx.on(ctx.stage, 'pointerleave', () => {
-    if (tracing && !ctx.locked()) {
-      ctx.fail('離開路線', '箭頭走出了練習區，回到起點再試');
-      wait();
-    }
+    if (tracing && !ctx.locked()) lose(lastP, `箭頭走出了練習區（已走 ${pct(idx)}%），回到起點再試`);
   });
 }

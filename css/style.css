@@ -140,6 +140,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--orange); ou
 .dbl-target { background: #7c3aed; font-size: 1.1rem; box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35); }
 .dbl-target.half { animation: half 0.35s ease-out; box-shadow: 0 0 0 8px rgba(124, 58, 237, 0.25); }
 @keyframes half { from { transform: scale(0.9); } to { transform: scale(1); } }
+.dbl-target.second { background: #16a34a; box-shadow: 0 0 0 10px rgba(22, 163, 74, 0.3); }
+.dbl-target.second.pop { animation: dbl-pop 0.35s ease-out forwards; }
+@keyframes dbl-pop { 0% { transform: scale(0.85); } 45% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1.25); opacity: 0; } }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; border: 4px solid #7c3aed; opacity: 0; }
+.ripple.r1 { animation: ripple 0.45s ease-out; }
+.ripple.r2 { border-color: #16a34a; border-width: 6px; animation: ripple 0.55s ease-out; }
+@keyframes ripple { from { transform: scale(0.6); opacity: 0.9; } to { transform: scale(1.1); opacity: 0; } }
 .hover-target { background: #e0f2fe; color: #0369a1; font-size: 1.1rem; }
 .hover-target svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 .hover-target .ring-bg { fill: none; stroke: #bae6fd; stroke-width: 10; }
@@ -154,6 +161,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--orange); ou
 .track { fill: none; stroke: #dbeafe; stroke-linecap: round; }
 .track-line { fill: none; stroke: #93c5fd; stroke-width: 2; stroke-dasharray: 6 8; }
 .tracing .track { stroke: #bbf7d0; }
+.trail { fill: none; stroke: #2563eb; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+.trail.failed { stroke: #ef4444; stroke-dasharray: 2 6; opacity: 0.9; }
+.best-run { fill: none; stroke: #fbbf24; stroke-width: 6; stroke-linecap: round; opacity: 0.45; }
+.best-flag circle { fill: #fff; stroke: #f59e0b; stroke-width: 3; }
+.path-layer .best-flag text { font-size: 14px; }
+.exit-mark circle { fill: var(--red); }
+.path-layer .exit-mark text { font-size: 15px; }
 .path-start { fill: #22c55e; }
 .path-end { fill: #fde68a; }
 .path-layer text { font-weight: 800; fill: #fff; font-size: 18px; }
@@ -196,13 +210,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--orange); ou
 
 .desk { background: linear-gradient(160deg, #e0f2fe, #f0fdf4); }
 .desk > .icon { position: absolute; }
-.icon { display: grid; justify-items: center; align-content: center; gap: 0.1rem; border-radius: 12px; padding: 0.2rem; cursor: default; border: 2px solid transparent; touch-action: none; }
-.icon .ico { font-size: 2.2rem; line-height: 1.1; }
-.icon .lbl { font-size: 0.85rem; font-weight: 700; text-align: center; word-break: break-all; }
+.icon { display: grid; justify-items: center; align-content: center; gap: 0.15rem; border-radius: 12px; padding: 0.2rem; cursor: default; border: 2px solid transparent; touch-action: none; overflow: hidden; }
+.desk > .icon { grid-template-rows: 58% auto; }
+.icon .ico { font-size: 1.9rem; line-height: 1; display: flex; align-items: center; justify-content: center; height: 100%; min-height: 0; overflow: hidden; }
+.icon .lbl { font-size: 0.8rem; line-height: 1.2; font-weight: 700; text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icon:hover { background: rgba(37, 99, 235, 0.1); }
 .icon.selected { background: rgba(37, 99, 235, 0.2); border-color: rgba(37, 99, 235, 0.4); }
-.icon.in-win { display: flex; justify-content: flex-start; gap: 0.6rem; padding: 0.3rem 0.8rem; min-height: 46px; border-radius: 8px; }
-.icon.in-win .ico { font-size: 1.5rem; }
+.icon.in-win { overflow: visible; display: flex; justify-content: flex-start; gap: 0.6rem; padding: 0.3rem 0.8rem; min-height: 46px; border-radius: 8px; }
+.icon.in-win .ico { font-size: 1.5rem; height: auto; overflow: visible; }
 .icon.in-win .lbl { font-size: 1rem; }
 .icon.floating { position: fixed; background: #fff; box-shadow: var(--shadow); z-index: 12; }
 .icon .rename { width: 100%; font-size: 0.9rem; padding: 0.1rem 0.2rem; border: 2px solid var(--blue); border-radius: 6px; }

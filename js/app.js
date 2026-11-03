@@ -208,7 +208,7 @@ function startPlay(meta) {
         f.className = `feedback show ${kind}`;
         f.innerHTML = `<span aria-hidden="true">${kind === 'good' ? '✓' : '!'}</span> ${esc(text)}`;
         clearTimeout(fbTimer);
-        fbTimer = setTimeout(() => { f.className = 'feedback'; }, kind === 'good' ? 900 : 2200);
+        fbTimer = setTimeout(() => { f.className = 'feedback'; }, kind === 'good' ? 900 : Math.max(2200, text.length * 110));
       },
       sound: (n) => play(n, data.settings.sound),
       status: ({ index, total, acc, attempts }) => {
